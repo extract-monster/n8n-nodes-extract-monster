@@ -1,0 +1,29 @@
+{
+	"node": "n8n-nodes-base.extractMonster",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Data Transformation", "Development"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://extract.monster/docs/essentials/authentication"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://extract.monster/docs"
+			}
+		],
+		"generic": [
+			{
+				"label": "API Reference",
+				"url": "https://extract.monster/docs/developers/api-reference"
+			},
+			{
+				"label": "Custom Schemas",
+				"url": "https://extract.monster/docs/developers/custom-schemas"
+			}
+		]
+	},
+	"alias": ["Document Processing", "Data Extraction", "OCR", "PDF Parser"]
+}

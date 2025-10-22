@@ -1,0 +1,72 @@
+{
+  "name": "Invoice Extraction Example",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://example.com/invoice.pdf",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "http-request",
+      "name": "Download Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "extractFile",
+        "useSchema": true,
+        "jsonSchema": "{\n  \"invoice_number\": {\"type\": \"string\"},\n  \"date\": {\"type\": \"string\"},\n  \"vendor\": {\"type\": \"string\"},\n  \"total\": {\"type\": \"number\"},\n  \"items\": {\n    \"type\": \"array\",\n    \"items\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"description\": {\"type\": \"string\"},\n        \"quantity\": {\"type\": \"number\"},\n        \"price\": {\"type\": \"number\"}\n      }\n    }\n  }\n}"
+      },
+      "id": "extract-monster",
+      "name": "Extract Invoice Data",
+      "type": "n8n-nodes-extract-monster.extractMonster",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "extractMonsterApi": {
+          "id": "1",
+          "name": "Extract Monster API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Download Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Invoice": {
+      "main": [
+        [
+          {
+            "node": "Extract Invoice Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

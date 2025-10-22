@@ -1,0 +1,73 @@
+{
+  "name": "Text Extraction Example",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "text",
+              "value": "Contact information: John Doe, email: john@example.com, phone: +1-555-1234"
+            }
+          ]
+        }
+      },
+      "id": "set-node",
+      "name": "Sample Text",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "extractText",
+        "text": "={{$json.text}}",
+        "useSchema": true,
+        "jsonSchema": "{\n  \"name\": {\"type\": \"string\"},\n  \"email\": {\"type\": \"string\"},\n  \"phone\": {\"type\": \"string\"}\n}"
+      },
+      "id": "extract-monster",
+      "name": "Extract Contact Info",
+      "type": "n8n-nodes-extract-monster.extractMonster",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "extractMonsterApi": {
+          "id": "1",
+          "name": "Extract Monster API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Sample Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample Text": {
+      "main": [
+        [
+          {
+            "node": "Extract Contact Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
