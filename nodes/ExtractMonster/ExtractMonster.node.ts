@@ -15,7 +15,7 @@ export class ExtractMonster implements INodeType {
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"]}}',
-		description: 'Extract data from files and text.',
+		description: 'AI-powered data extraction from PDFs, images, documents, audio, and video. Extract invoices, receipts, forms, tables, and custom data with flexible JSON schemas.',
 		defaults: {
 			name: 'Extract Monster',
 		},
