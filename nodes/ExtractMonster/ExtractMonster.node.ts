@@ -5,7 +5,6 @@ import {
 	INodeTypeDescription,
 	NodeOperationError,
 } from 'n8n-workflow';
-import FormData from 'form-data';
 
 export class ExtractMonster implements INodeType {
 	description: INodeTypeDescription = {
@@ -61,14 +60,14 @@ export class ExtractMonster implements INodeType {
 				},
 				options: [
 					{
-						name: 'From Previous Node',
+						name: 'Binary Data',
 						value: 'binary',
 						description: 'Use file from a previous node (e.g., Read Binary File, HTTP Request)',
 					},
 					{
-						name: 'File Path',
-						value: 'path',
-						description: 'Specify a file path on the server',
+						name: 'URL',
+						value: 'url',
+						description: 'Download file from a URL',
 					},
 				],
 				default: 'binary',
@@ -91,21 +90,21 @@ export class ExtractMonster implements INodeType {
 				hint: 'Connect a "Read Binary File" or "HTTP Request" node before this one',
 				placeholder: 'data',
 			},
-			// File path option
+			// URL option
 			{
-				displayName: 'File Path',
-				name: 'filePath',
+				displayName: 'File URL',
+				name: 'fileUrl',
 				type: 'string',
 				default: '',
 				required: true,
 				displayOptions: {
 					show: {
 						operation: ['extractFile'],
-						inputMethod: ['path'],
+						inputMethod: ['url'],
 					},
 				},
-				description: 'Full path to the file on the server',
-				placeholder: '/path/to/invoice.pdf',
+				description: 'URL of the file to extract data from',
+				placeholder: 'https://example.com/invoice.pdf',
 			},
 			// Extract from Text options
 			{
@@ -208,72 +207,95 @@ export class ExtractMonster implements INodeType {
 				let response: any;
 
 				if (operation === 'extractFile') {
-					// Extract from file
 					const inputMethod = this.getNodeParameter('inputMethod', i, 'binary') as string;
-					const formData = new FormData();
 
-					let fileBuffer;
+					let fileBuffer: Buffer;
 					let fileName: string;
 					let mimeType: string | undefined;
 
-					if (inputMethod === 'binary') {
-						// Get file from previous node
+					if (inputMethod === 'url') {
+						// Extract from URL - download the file first
+						const fileUrl = this.getNodeParameter('fileUrl', i) as string;
+
+						try {
+							// Download file from URL
+							const downloadResponse = await this.helpers.httpRequest({
+								method: 'GET',
+								url: fileUrl,
+								encoding: 'arraybuffer',
+								returnFullResponse: true,
+							});
+
+							fileBuffer = Buffer.from(downloadResponse.body as ArrayBuffer);
+							
+							// Extract filename from URL or Content-Disposition header
+							const contentDisposition = downloadResponse.headers['content-disposition'];
+							if (contentDisposition) {
+								const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+								fileName = filenameMatch ? filenameMatch[1].replace(/['"]/g, '') : 'downloaded-file';
+							} else {
+								// Extract from URL path
+								const urlPath = new URL(fileUrl).pathname;
+								fileName = urlPath.split('/').pop() || 'downloaded-file';
+							}
+
+							// Get MIME type from response headers
+							mimeType = downloadResponse.headers['content-type'] as string;
+						} catch (error) {
+							const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+							throw new NodeOperationError(
+								this.getNode(),
+								`Failed to download file from URL: ${errorMessage}`,
+								{ itemIndex: i },
+							);
+						}
+					} else {
+						// Extract from binary file - get file from previous node
 						const binaryPropertyName = this.getNodeParameter('binaryPropertyName', i) as string;
 						const binaryData = this.helpers.assertBinaryData(i, binaryPropertyName);
 						fileBuffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
 						fileName = binaryData.fileName || 'file';
 						mimeType = binaryData.mimeType;
-					} else {
-						// Get file from path
-						let filePath = this.getNodeParameter('filePath', i) as string;
-
-						try {
-							const readFile = require('fs').promises.readFile;
-							const path = require('path');
-							const os = require('os');
-
-							// Expand ~ to home directory
-							if (filePath.startsWith('~/')) {
-								filePath = path.join(os.homedir(), filePath.slice(2));
-							} else if (filePath === '~') {
-								filePath = os.homedir();
-							}
-
-							fileBuffer = await readFile(filePath);
-							fileName = path.basename(filePath);
-							mimeType = 'application/octet-stream'; // Let server determine actual type
-						} catch (error) {
-							const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-							throw new NodeOperationError(
-								this.getNode(),
-								`Failed to read file: ${errorMessage}`,
-								{ itemIndex: i },
-							);
-						}
 					}
 
-					formData.append('file', fileBuffer, {
-						filename: fileName,
-						contentType: mimeType,
-					});
+					// Prepare multipart form data manually (for both URL and binary inputs)
+					const boundary = `----FormBoundary${Math.random().toString(36).substring(2)}`;
+					const parts: Buffer[] = [];
+
+					// Add file part
+					parts.push(Buffer.from(`--${boundary}\r\n`));
+					parts.push(Buffer.from(`Content-Disposition: form-data; name="file"; filename="${fileName}"\r\n`));
+					if (mimeType) {
+						parts.push(Buffer.from(`Content-Type: ${mimeType}\r\n`));
+					}
+					parts.push(Buffer.from('\r\n'));
+					parts.push(fileBuffer);
+					parts.push(Buffer.from('\r\n'));
 
 					// Add schema if provided
 					if (schema) {
-						formData.append('schema', schema);
+						parts.push(Buffer.from(`--${boundary}\r\n`));
+						parts.push(Buffer.from('Content-Disposition: form-data; name="schema"\r\n\r\n'));
+						parts.push(Buffer.from(schema));
+						parts.push(Buffer.from('\r\n'));
 					}
 
-					// Make request using httpRequest which handles FormData better
-					const requestOptions = {
-						method: 'POST' as const,
+					// Add final boundary
+					parts.push(Buffer.from(`--${boundary}--\r\n`));
+
+					// Combine all parts
+					const body = Buffer.concat(parts);
+
+					// Make request
+					response = await this.helpers.httpRequest({
+						method: 'POST',
 						url: 'https://api.extract.monster/v1/extract/file',
 						headers: {
 							'Authorization': `Bearer ${apiKey}`,
-							...formData.getHeaders(),
+							'Content-Type': `multipart/form-data; boundary=${boundary}`,
 						},
-						body: formData,
-					};
-
-					response = await this.helpers.httpRequest(requestOptions);
+						body,
+					});
 				} else if (operation === 'extractText') {
 					// Extract from text
 					const text = this.getNodeParameter('text', i) as string;
